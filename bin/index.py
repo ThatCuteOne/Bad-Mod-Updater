@@ -106,7 +106,6 @@ class Modindex:
 
     def calculate_sha512(self,file_path:str):
         sha512_hash = hashlib.sha512()
-        
         # Open the file in binary mode
         with open(file_path, 'rb') as f:
             for byte_block in iter(lambda: f.read(4096), b""):
@@ -269,7 +268,7 @@ class VersionEntry:
             mod_name = (json.loads(moddata))["name"]
             return mod_name
         elif loadertype == 2 or loadertype == 3:
-            return (toml.loads(moddata))['mods'][0]['displayName']
+            return (1(moddata))['mods'][0]['displayName']
         
 
 def a():
