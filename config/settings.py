@@ -1,8 +1,9 @@
+import logging
 import os
 from pathlib import Path
 
 # Configuration
-MINECRAFT_VERSION = "1.20.3"
+MINECRAFT_VERSION = "1.21.6"
 MOD_LOADER = "fabric"
 MODS_DIRECTORY = Path(__file__).parent.parent / "mods"
 INDEX_FILE = MODS_DIRECTORY / ".index.json"
