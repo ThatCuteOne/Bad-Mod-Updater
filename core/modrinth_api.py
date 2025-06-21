@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import List
 import requests
 
-from config import settings
+from core import settings
 
 
 class ModrinthAPI():

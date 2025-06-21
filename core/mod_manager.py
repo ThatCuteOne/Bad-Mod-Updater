@@ -8,7 +8,7 @@ from venv import logger
 import zipfile
 
 import toml
-from config import settings
+from core import settings
 from core.modrinth_api import ModrinthAPI
 
 class User():
