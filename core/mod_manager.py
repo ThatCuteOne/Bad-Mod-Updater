@@ -87,8 +87,14 @@ class ModEntry():
         """Get the primary file from a version."""
         primary_files = [f for f in version["files"] if f['primary']]
         if not primary_files:
-            raise ValueError(f"Version {version.modname} has no primary file")
+            raise ValueError(f"Version {version["metadata"]["title"]} has no primary file")
         return primary_files[0]
+    def _get_required_dependencies(version: dict):
+        """Get the all required dependencies from a version."""
+        required_dependencies = [f for f in version["dependencies"] if f['dependency_type'] == "required"]
+        if not required_dependencies:
+            logger.info(f"Version {version["metadata"]["title"]} has no required dependencies")
+        return required_dependencies
     @staticmethod
     def _add_mod_file(version):
         version['mod_file'] = ModEntry._get_primary_file(version)
@@ -171,14 +177,37 @@ class ModManager():
                 self.user.print_right_text(f"Found New Version '{new_version['version_number']}' for mod '{version['metadata']['title']}'","Installing...")
                 self.install_mod(new_version,version)
                 return True
-            
+    def remove_orphan_dependencies(self,entries):
+        print("removeing orphans")
+        referenced_ids = set()
+        removed_mod_files = []
+        for entry in entries:
+            for dep in entry.get("dependencies", []):
+                referenced_ids.add(dep["project_id"])
+            if entry.get("installed_via_dependency_handler", False):
+                for parent in entry.get("parents", []):
+                    referenced_ids.add(parent)
+
+        filtered_entries = []
+        for entry in entries:
+            if not entry.get("installed_via_dependency_handler", False) or entry["project_id"] in referenced_ids:
+                print(f"not orphan:{entry["mod_file"]["filename"]}")
+                filtered_entries.append(entry)
+            else:
+                removed_mod_files.append(entry["mod_file"]["filename"])
+                os.remove(settings.MODS_DIRECTORY / entry["mod_file"]["filename"])
+        return filtered_entries,removed_mod_files
     def verifiy_index(self,mod_files):
         new_index = []
         for i in self.index.versions:
             for f in mod_files:
                 if ModEntry.calculate_hash(f) == i['mod_file']['hashes']['sha512']:
                     new_index.append(i)
-        self.index.versions = new_index
+        self.index.versions, removed_mod_files = self.remove_orphan_dependencies(new_index)
+        self.index.save()
+        mod_files -= set(removed_mod_files)
+        return mod_files
+        
 
     def resolve_dependencies(self,parent_version:dict):
         print('resoving dependencies...')
@@ -192,6 +221,10 @@ class ModManager():
         for dependency in dependencies:
             d = self.index.key_in_versions('project_id',dependency['project_id'])
             if d:
+                try:
+                    d['parents'].append(parent_version['project_id'])
+                except KeyError:
+                    d['parents'] = [parent_version['project_id']]
                 print(f"Dependency '{d['metadata']['title']}' is already installed")
             else:
                 version = self.api.get_newest_version(dependency)
@@ -199,7 +232,11 @@ class ModManager():
                     print(f"Couln't find compatible version for selected Minecraft Version: '{settings.MINECRAFT_VERSION}' and Loader: '{settings.MOD_LOADER}'")
                     return False
                 version['metadata'] =  self.api.get_project_info(version['project_id'])
+                if 'parents' not in version or not isinstance(version['parents'], list):
+                    version['parents'] = []
+                version['parents'].append(parent_version['project_id'])
                 print(f"Installing dependency '{version['metadata']['title']}'")
+                version["installed_via_dependency_handler"] = True
                 self.install_new_mod(version)
                 self.resolve_dependencies(version)
 
@@ -249,7 +286,7 @@ class ModManager():
             self.get_mod_from_file(modfile)
 
     def get_mod_files(self) -> List[Path]:
-        return [f for f in os.listdir(settings.MODS_DIRECTORY) if f.endswith('.jar')]
+        return set(f for f in os.listdir(settings.MODS_DIRECTORY) if f.endswith('.jar'))
 
     def update_all(self) -> int:
         mod_files = self.get_mod_files()
@@ -257,7 +294,7 @@ class ModManager():
             print("No mod files found to update")
             return 0
         success_count = 0
-        self.verifiy_index(mod_files)
+        mod_files = self.verifiy_index(mod_files)
         for mod_file in mod_files:
             if self.update_mod(mod_file):
                 success_count += 1
