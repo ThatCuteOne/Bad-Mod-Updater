@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import List
 from venv import logger
 import zipfile
-
+from colorama import init, Fore, Style
+init()
 import toml
 from core import settings
 from core.modrinth_api import ModrinthAPI
@@ -23,6 +24,16 @@ class User():
                 return False
             else:
                 print("Please enter 'yes' or 'no'.")
+    @staticmethod
+    def print_right_text(left_text,right_text):
+        available_space = os.get_terminal_size().columns - len(left_text) - len(right_text)
+        print(left_text + " " * max(0, available_space) + right_text)
+    @staticmethod
+    def print_rgb_colorama(text, rgb_int):
+        r = (rgb_int >> 16) & 0xFF  # Red component
+        g = (rgb_int >> 8) & 0xFF   # Green component
+        b = rgb_int & 0xFF           # Blue component
+        print(f"\033[38;2;{r};{g};{b}m{text}{Style.RESET_ALL}")
 
 class ModEntry():
     @staticmethod
@@ -71,12 +82,17 @@ class ModEntry():
             for byte_block in iter(lambda: f.read(4096), b""):
                 sha512_hash.update(byte_block)
         return sha512_hash.hexdigest()
-    def _get_primary_file(self, version: dict):
+    @staticmethod
+    def _get_primary_file(version: dict):
         """Get the primary file from a version."""
         primary_files = [f for f in version["files"] if f['primary']]
         if not primary_files:
             raise ValueError(f"Version {version.modname} has no primary file")
         return primary_files[0]
+    @staticmethod
+    def _add_mod_file(version):
+        version['mod_file'] = ModEntry._get_primary_file(version)
+        return version
 
 class ModIndex():
     def __init__(self, index_file: Path = settings.INDEX_FILE):
@@ -122,47 +138,76 @@ class ModIndex():
                     (f for f in entry.get('files', []) if f.get('primary', False)),
                     None
                 )
-                
                 if primary_file and primary_file['hashes']['sha512'] == target_hash:
                     return entry
-                    
         except Exception as e:
             logger.error(f"Error searching index: {e}")
-            
         logger.warning(f"No version found in index for file {file}")
         return None
-    def hash_in_versions(self,target_hash:str):
-            for existing in self.versions:
-                # get modversion from index by matching hash
-                for existing_file in existing['files']:
-                    if (existing_file['primary'] and 
-                        existing_file['hashes'].get('sha512') == target_hash):
-                            return True
-            return False    
+    def key_in_versions(self,key:str,target_key):
+            for entry in self.versions:
+                if entry[f'{key}'] == target_key:
+                    return entry
+            return False
                 
-
-
 
 class ModManager():
     def __init__(self):
         self.index = ModIndex()
         self.api = ModrinthAPI()
+        self.user = User()
     def get_mod(self,version:dict):
-        print(f"fetching updates...")
         new_version = self.api.get_newest_version(version)
         if not new_version:
             print(f"Couln't find compatible version for selected Minecraft Version: '{settings.MINECRAFT_VERSION}' and Loader: '{settings.MOD_LOADER}'")
             return False
+        self.resolve_dependencies(new_version)
         for file in new_version['files']:
             if file["hashes"]['sha512'] == version['mod_file']["hashes"]['sha512'] and file["primary"] == True:
                 print("Newest Version is already installed")
             else:
                 new_version['mod_file'] = file
-                new_version['title'] = version['title']
-                print(f"Found New Version: '{new_version['version_number']}'         Installing...")
+                new_version['metadata'] = version['metadata']
+                self.user.print_right_text(f"Found New Version '{new_version['version_number']}' for mod '{version['metadata']['title']}'","Installing...")
                 self.install_mod(new_version,version)
                 return True
+            
+    def verifiy_index(self,mod_files):
+        new_index = []
+        for i in self.index.versions:
+            for f in mod_files:
+                if ModEntry.calculate_hash(f) == i['mod_file']['hashes']['sha512']:
+                    new_index.append(i)
+        self.index.versions = new_index
 
+    def resolve_dependencies(self,parent_version:dict):
+        print('resoving dependencies...')
+        dependencies = [
+            d for d in parent_version['dependencies']
+            if d['dependency_type'] == "required"
+        ]
+        if not dependencies:
+            print("No required dependencies found")
+            return False
+        for dependency in dependencies:
+            d = self.index.key_in_versions('project_id',dependency['project_id'])
+            if d:
+                print(f"Dependency '{d['metadata']['title']}' is already installed")
+            else:
+                version = self.api.get_newest_version(dependency)
+                if not version:
+                    print(f"Couln't find compatible version for selected Minecraft Version: '{settings.MINECRAFT_VERSION}' and Loader: '{settings.MOD_LOADER}'")
+                    return False
+                version['metadata'] =  self.api.get_project_info(version['project_id'])
+                print(f"Installing dependency '{version['metadata']['title']}'")
+                self.install_new_mod(version)
+                self.resolve_dependencies(version)
+
+    def install_new_mod(self,version:dict):
+        version = ModEntry._add_mod_file(version)
+        self.api.download_file(version['mod_file']['url'],settings.MODS_DIRECTORY / version['mod_file']['filename'])
+        self.index.add_version(version)
+            
     def install_mod(self,new_version,old_version):
         self.api.download_file(new_version['mod_file']['url'],settings.MODS_DIRECTORY / new_version['mod_file']['filename'])
         self.index.remove_by_hash(old_version['mod_file']['hashes']['sha512'])
@@ -181,14 +226,14 @@ class ModManager():
                 for f in new_version['files']:
                         if f["primary"]:
                             new_version['mod_file'] = f
-                            new_version['title'] = project['title']
+                            new_version['metadata'] = project['metadata']
                             self.install_mod(new_version,{'mod_file':{'hashes':{'sha512':metadata['sha512']},'filename':file}})
                             return True
         else:
             for f in version['files']:
                 if f["primary"]:
                     version['mod_file'] = f
-            version['title'] = project['title']
+            version['metadata'] = project
             print(f"Automatically detected installed version for mod '{project['title']}' version: '{version['version_number']}'")
             self.index.add_version(version)
             return self.get_mod(version)
@@ -196,10 +241,9 @@ class ModManager():
 
 
     def update_mod(self,modfile):
-
         data = self.index.search_in_index(self.index.versions, modfile)
         if data:
-            print(f"Mod:'{data['title']}'")
+            print(f"Mod:'{data['metadata']['title']}'")
             return self.get_mod(data)
         else:
             self.get_mod_from_file(modfile)
@@ -213,6 +257,7 @@ class ModManager():
             print("No mod files found to update")
             return 0
         success_count = 0
+        self.verifiy_index(mod_files)
         for mod_file in mod_files:
             if self.update_mod(mod_file):
                 success_count += 1

@@ -54,3 +54,8 @@ class ModrinthAPI():
         response = requests.get(url)
         response.raise_for_status()
         return response.json()
+    @staticmethod
+    def get_project_info(project_id: str):
+        response = requests.get(f"https://api.modrinth.com/v2/project/{project_id}")
+        response.raise_for_status()
+        return response.json()
