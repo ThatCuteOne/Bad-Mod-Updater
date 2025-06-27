@@ -254,6 +254,8 @@ class ModManager():
     def get_mod_from_file(self,file):
         metadata = ModEntry.get_metadata_from_jar(ModEntry(),file)
         project = self.api.search_mod(metadata['name'])
+        if not project:
+            return False
         versions = self.api.get_project_versions(project['project_id'])
         version = self.index.search_in_index(versions,file)
         
@@ -263,7 +265,7 @@ class ModManager():
                 for f in new_version['files']:
                         if f["primary"]:
                             new_version['mod_file'] = f
-                            new_version['metadata'] = project['metadata']
+                            new_version['metadata'] = project
                             self.install_mod(new_version,{'mod_file':{'hashes':{'sha512':metadata['sha512']},'filename':file}})
                             return True
         else:
