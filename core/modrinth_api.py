@@ -10,15 +10,16 @@ from core import settings
 class ModrinthAPI():
     
 
-    def get_newest_version(self,version:dict):
+    async def get_newest_version(self,version:dict):
         """Returns the newest mod version(if compatible)
         Args:
             version(dict) : local mod version
         """
-        return self.get_newest(self.get_project_versions(version['project_id']))
+        a = await self.get_project_versions(version['project_id'])
+        return await self.get_newest(a)
 
 
-    def get_newest(self,results):
+    async def get_newest(self,results):
         compatible_versions = []
         for new_version in results:
             if settings.MINECRAFT_VERSION in new_version["game_versions"]:
@@ -31,13 +32,13 @@ class ModrinthAPI():
             a = sorted(compatible_versions, key=lambda x: x["date_published"],reverse=True)
             return a[0]
     @staticmethod
-    def download_file(url: str, destination: Path) -> bool:
+    async def download_file(url: str, destination: Path) -> bool:
         response = requests.get(url)
         response.raise_for_status()
         with open(destination, "wb") as f:
             f.write(response.content)
     @staticmethod
-    def search_mod(modname: str,loader: str = settings.MOD_LOADER,minecraft_version: str = settings.MINECRAFT_VERSION):
+    async def search_mod(modname: str,loader: str = settings.MOD_LOADER,minecraft_version: str = settings.MINECRAFT_VERSION):
         params = {"query": f"{modname}","index": "relevance","limit": 1,"facets": f"""
                   [["project_type:mod"],["categories:{loader}"],["versions:{minecraft_version}"]]
                   """}
@@ -49,13 +50,13 @@ class ModrinthAPI():
         else:
             return results[0]
     @staticmethod
-    def get_project_versions(project_id: str) -> List[dict]:
+    async def get_project_versions(project_id: str) -> List[dict]:
         url = f"https://api.modrinth.com/v2/project/{project_id}/version"
         response = requests.get(url)
         response.raise_for_status()
         return response.json()
     @staticmethod
-    def get_project_info(project_id: str):
+    async def get_project_info(project_id: str):
         response = requests.get(f"https://api.modrinth.com/v2/project/{project_id}")
         response.raise_for_status()
         return response.json()

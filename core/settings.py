@@ -10,7 +10,8 @@ from pathlib import Path
 REQUIRED_PACKAGES = [
     'requests',
     'toml',
-    'colorama'
+    'colorama',
+    'aiofiles'
 ]
 
 def install_package(package):
