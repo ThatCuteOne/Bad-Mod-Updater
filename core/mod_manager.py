@@ -39,7 +39,7 @@ class User():
 
 class ModEntry():
     @staticmethod
-    def load_file(file:Path):
+    async def load_file(file:Path):
         return dict(
             filename = str(file),
             hashes ={'sha512': ModEntry.calculate_hash(file)},
@@ -147,7 +147,7 @@ class ModIndex():
             for entry in index:
                 # Find the primary file in the files array
                 primary_file = next(
-                    (f for f in entry.get('files', []) if f.get('primary', False)),
+                    (f for f in entry.get('files', []) if f.get('primary', True)),
                     None
                 )
                 if primary_file and primary_file['hashes']['sha512'] == target_hash:

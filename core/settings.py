@@ -42,7 +42,7 @@ CONFIG_FILE = Path(__file__).parent.parent / "config.json"
 
 # create config
 DEFAULT_CONFIG = {
-    "minecraft_version": "1.21.6",
+    "minecraft_version": "1.21.7",
     "mod_loader": "fabric",
     "mods_directory": "./mods",
     "index_file": ".index.json"
