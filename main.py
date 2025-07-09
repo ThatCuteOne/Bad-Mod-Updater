@@ -13,7 +13,7 @@ from core.mod_manager import ModEntry
 import core.mod_manager as mod_manager
 import core.settings as settings
 
-os.chdir(settings.MODS_DIRECTORY)
+
 
 
 async def get_metadata_from_jar(file) -> dict:
@@ -94,13 +94,10 @@ async def _get_data_backup(file):
 
 
 
-async def process_file(file):
-    global index
-
-    hash = await mod_manager.calc_hash(file)
+async def process_file(file,index):
     data = None
     for e in index.data:
-        if e.get("hash") == hash:
+        if e.get("hash") == await mod_manager.calc_hash(file):
             data = e
     if data:
         mod = ModEntry(data)
@@ -109,7 +106,7 @@ async def process_file(file):
             mod, versions = await _get_data_backup(file)
         except TypeError:
             return False
-    
+    await mod.write_to_index(index)
     if not versions:
         versions = await api.request(f"https://api.modrinth.com/v2/project/{mod.project_id}/version")
     print(mod.mod_name)
@@ -138,29 +135,20 @@ async def update_mod(mod:ModEntry,versions):
             else:
                 os.remove(settings.MODS_DIRECTORY / Path(mod.filename))
                 await api.download_file(f.get('url'),settings.MODS_DIRECTORY / f.get('filename'))
+                
                 return True
 
-
-
-
-
-
-
-
-
-
-    # await data = {
-    #     "hash" : mod_manager.calc_hash(file)
-    # }
-
 async def main():
+    index = mod_manager.index()
     files = set(f for f in os.listdir(settings.MODS_DIRECTORY) if f.endswith('.jar'))
-    tasks = [process_file(file) for file in files]
+    tasks = [process_file(file,index) for file in files]
     await asyncio.gather(*tasks)
+    index.save()
 
 
-index = mod_manager.index()
 
-asyncio.run(main())
+if __name__ == "__main__":
+    os.chdir(settings.MODS_DIRECTORY)
+    asyncio.run(main())
 
 
