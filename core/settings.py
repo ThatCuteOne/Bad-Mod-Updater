@@ -11,7 +11,8 @@ REQUIRED_PACKAGES = [
     'requests',
     'toml',
     'colorama',
-    'aiofiles'
+    'aiofiles',
+    'httpx'
 ]
 
 def install_package(package):

@@ -1,0 +1,25 @@
+[
+    {
+        "dependency": true,
+        "parents": [
+            "<parent project_slug>"
+        ],
+        "project_id": "<project_slug>",
+        "mod_name": "Fabric API",
+        "hash": "<hash>",
+        "url": "modrinth.com/whateverthefuck",
+        "color": "#12312" // for display maybe
+    },
+    {
+        "dependency": false,
+        "project_id": "<project_slug>", // a
+        "mod_name": "Sodium", // a
+        "hash": "<hash>", //a
+        "url": "modrinth.com/whateverthefuck",
+        "color": "#12312", // for display maybe a
+        "dependencies": [
+            "project_id"
+        ],
+        "filename": "adad.jar"
+    }
+]
