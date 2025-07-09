@@ -95,6 +95,7 @@ async def _get_data_backup(file):
 
 
 async def process_file(file,index):
+    versions = None
     data = None
     for e in index.data:
         if e.get("hash") == await mod_manager.calc_hash(file):
@@ -113,9 +114,6 @@ async def process_file(file,index):
     if not mod.filename:
         return False
     await update_mod(mod,versions)
-    
-
-    
 
 async def update_mod(mod:ModEntry,versions):
     # filter versions
@@ -135,7 +133,6 @@ async def update_mod(mod:ModEntry,versions):
             else:
                 os.remove(settings.MODS_DIRECTORY / Path(mod.filename))
                 await api.download_file(f.get('url'),settings.MODS_DIRECTORY / f.get('filename'))
-                
                 return True
 
 async def main():
