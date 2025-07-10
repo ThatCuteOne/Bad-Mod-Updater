@@ -46,7 +46,8 @@ DEFAULT_CONFIG = {
     "mod_loader": "fabric",
     "mods_directory": "./mods",
     "index_file": ".index.json",
-    "autoinstall_via_search": False
+    "autoinstall_via_search": False,
+    "no_prompt": False
 }
 
 try:
@@ -66,6 +67,7 @@ MOD_LOADER = config['mod_loader']
 MODS_DIRECTORY = Path(__file__).parent.parent / (config['mods_directory'])
 INDEX_FILE = MODS_DIRECTORY / config['index_file']
 AUTOINSTALL_SEARCH = config["autoinstall_via_search"]
+NO_PROMPT = config["no_prompt"]
 
 # Ensure mods directory exists
 MODS_DIRECTORY.mkdir(exist_ok=True)

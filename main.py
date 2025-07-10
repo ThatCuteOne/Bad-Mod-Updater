@@ -17,14 +17,14 @@ import core.settings as settings
 
 
 
-# async def get_user_confirmation(prompt: str = "Confirm? (yes/no): ") -> bool:
-#     while True:
-#         user_input = (await input(prompt + "\n")).strip().lower()
-#         if user_input in ('y', 'yes'):
-#             return True
-#         elif user_input in ('n', 'no'):
-#             return False
-#         print("Please answer with 'yes' or 'no'")
+async def get_user_confirmation(prompt: str = "Confirm? (yes/no): ") -> bool:
+    while True:
+        user_input = (await input(prompt + "\n")).strip().lower()
+        if user_input in ('y', 'yes'):
+            return True
+        elif user_input in ('n', 'no'):
+            return False
+        print("Please answer with 'yes' or 'no'")
 
 async def get_metadata_from_jar(file) -> dict:
             with zipfile.ZipFile(settings.MODS_DIRECTORY / file, 'r') as jar:
@@ -56,101 +56,83 @@ async def get_metadata_from_jar(file) -> dict:
             
                 raise ValueError("Unsupported mod format")
 
-async def detect_version(data,versions) -> dict:
+async def detect_version(hash,versions) -> dict:
     for v in versions:
         for f in v.get('files'):
             if f.get('primary') == True:
-                if f['hashes'].get("sha512") == data.get('hash'):
-                    data['url'] = f.get("url")
-                    data['dependencies'] = [
-                        d.get("project_id")
-                        for d in v['dependencies']
-                        if d.get('dependency_type') == "required"
-                    ]
-                    return data
-    raise LookupError
+                if f['hashes'].get("sha512") == hash:
+                    return {
+                        "url": f.get("url"),
+                        'dependencies': [
+                            d.get("project_id")
+                            for d in v['dependencies']
+                            if d.get('dependency_type') == "required"
+                        ]
+                    }
+    return None
 
 
-async def _get_data_backup(file):
+async def _get_data_backup(mod:ModEntry):
     '''
     Tries to get the Version data from modrinth by extracting data from the file directly
     '''
-    file_data = await get_metadata_from_jar(file)
+    mod.jar_metadata = await get_metadata_from_jar(mod.filename)
     try:
          # get version data from direct link(using id specified in jar)
-         response = await api.request(f"https://api.modrinth.com/v2/project/{file_data.get("id")}")
-         data = {
-             "color" : response.get("color"),
-             "project_id": response.get("id"),
-             "mod_name" : response.get("title"),
-             "filename": str(file)
-         } 
-         data["hash"] = await mod_manager.calc_hash(file)
-         versions = await api.request(f"https://api.modrinth.com/v2/project/{data.get('project_id')}/version")
-         data  = await detect_version(data,versions )
-         
+         response = await api.request(f"https://api.modrinth.com/v2/project/{mod.jar_metadata.get("id")}")
+         versions = await api.request(f"https://api.modrinth.com/v2/project/{response.get("id")}/version")
+         await mod.get_data_from_dict(await detect_version(await mod_manager.calc_hash(mod.filename),versions))
+         await mod.get_data_from_dict(response)
+         mod.mod_name = response.get("title")
+         mod.versions = versions
+         mod.project_id = response.get("id")
     except:
         try:
             # get version data via modrinth search
-            response = await api.search(file_data.get("name"))
+            response = await api.search(mod.jar_metadata.get("name"))
             if response.get('total_hits') == 0:
                 return False
-            response = response.get('hits')[0]
-            data = {
-             "color" : response.get("color"),
-             "project_id": response.get("project_id"),
-             "mod_name" : response.get("title"),
-             "filename": str(file)
-         }
-            data["hash"] = await mod_manager.calc_hash(file)
-            versions = await api.request(f"https://api.modrinth.com/v2/project/{data.get('project_id')}/version")
-            data = await detect_version(data,versions)
-        except LookupError:
-            if settings.AUTOINSTALL_SEARCH == False:
-                raise Exception
-
-            # TODO make this stuffy do stuff
-            # if await get_user_confirmation(f"Couldn't automatically detect installed version for file {file}, do you want to proceed with installing '{data.get("mod_name")}' Confirm? (yes/no)"):
-            #     data = {
-            #         "color" : response.get("color"),
-            #         "project_id": response.get("project_id"),
-            #         "mod_name" : response.get("title"),
-            #         "filename": str(file)
-            #     }
-            pass
+            result = response.get('hits')[0]
+            versions = await api.request(f"https://api.modrinth.com/v2/project/{result.get('project_id')}/version")
+            await mod.get_data_from_dict(await detect_version(await mod_manager.calc_hash(mod.filename),versions))
+            await mod.get_data_from_dict(result)
+            mod.mod_name = result.get("title")
+            mod.versions = versions
         except Exception as e:
-            print(e)
+           # TODO make this stuffy do stuff
+            #if not settings.NO_PROMPT:
+            # if await get_user_confirmation(f"Couldn't automatically detect installed version for file {file}, do you want to proceed with installing '{data.get("mod_name")}' Confirm? (yes/no)"):
+            return False
             raise TypeError
 
-
     
-    return ModEntry(data), versions
+    return True
 
 async def process_file(file,index):
-    versions = None
-    data = None
-    file_hash = await mod_manager.calc_hash(file)
+    mod = ModEntry()
+    mod.filename = file
+    mod.index = index
+    mod.hash = await mod_manager.calc_hash(file)
     for e in index.data:
-        if e.get("hash") == file_hash:
-            data = e
-    if data:
-        mod = ModEntry(data)
+        if e.get("hash") == mod.hash:
+            await mod.get_data_from_dict(e)
+            break
     else:
-        try:
-            mod, versions = await _get_data_backup(file)
-        except TypeError:
-            return False
-    await mod.remove_from_index(index)
-    await mod.write_to_index(index)
-    if not versions:
-        versions = await api.request(f"https://api.modrinth.com/v2/project/{mod.project_id}/version")
-    print(f"{mod.mod_name} \n {mod.color} \n{mod.dependency}\n{mod.filename}\n{mod.hash}\n{mod.project_id}\n{mod.url}")
-    await update_mod(mod,versions)
+        if not await _get_data_backup(mod):
+            return
+            
+    # replace old index entry with new one
+    await mod.remove_from_index()
+    await mod.write_to_index()
+    if not mod.versions:
+        mod.versions = await api.request(f"https://api.modrinth.com/v2/project/{mod.project_id}/version")
+    await update_mod(mod)
 
-async def update_mod(mod:ModEntry,versions):
+async def update_mod(mod:ModEntry):
+    print(mod.mod_name)
     # filter versions
     compatible_versions = []
-    for v in versions:
+    for v in mod.versions:
         if settings.MINECRAFT_VERSION in v["game_versions"] and settings.MOD_LOADER in v["loaders"]:
             compatible_versions.append(v)
     if not compatible_versions:

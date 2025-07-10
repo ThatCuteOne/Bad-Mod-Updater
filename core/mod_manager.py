@@ -40,22 +40,21 @@ async def calc_hash(file:Path):
 
 
 class ModEntry():
-    def __init__(self,data:dict):
-        self.color = data.get("color")
-        self.hash = data.get("hash")
-        self.dependency = data.get("dependency")
-        self.project_id = data.get("project_id")
-        self.mod_name = data.get("mod_name")
-        self.url = data.get("url")
-        self.filename = data.get('filename')
-        try:
-            self.dependencies = data.get("dependencies")
-        except:
-            pass
-    async def write_to_index(self,index:index):
-        await index.write(await self.convert_to_dict())
-    async def remove_from_index(self,index:index):
-        await index.remove_by_hash(self.hash)
+    def __init__(self):
+        self.color = None
+        self.hash = None
+        self.dependency = None
+        self.project_id = None
+        self.mod_name = None
+        self.url = None
+        self.filename = None
+        self.versions = None
+        self.dependencies = None
+
+    async def write_to_index(self):
+        await self.index.write(await self.convert_to_dict())
+    async def remove_from_index(self):
+        await self.index.remove_by_hash(self.hash)
 
     async def convert_to_dict(self):
         return {
@@ -65,7 +64,20 @@ class ModEntry():
             "project_id": self.project_id,
             "mod_name": self.mod_name,
             "url":self.url,
-            "filename":self.filename,
             "dependencies" : self.dependencies
 
         }
+    async def get_data_from_dict(self, data: dict):
+        for attr in data:
+            if hasattr(self, attr):
+                setattr(self, attr, data[attr])
+    # async def get_data_from_dict(self,data:dict):
+    #     self.color = data.get("color")
+    #     self.hash = data.get("hash")
+    #     self.dependency = data.get("dependency")
+    #     self.project_id = data.get("project_id")
+    #     self.mod_name = data.get("mod_name")
+    #     self.url = data.get("url")
+    #     self.filename = data.get('filename')
+    #     self.versions = data.get('versions')
+    #     self.dependencies = data.get("dependencies")
