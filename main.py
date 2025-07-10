@@ -16,6 +16,12 @@ import core.mod_manager as mod_manager
 import core.settings as settings
 
 
+# TODO Dependency manager
+# TODO auto detect mod deletion and remove depends accordingly
+# TODO maybe re-add search prompt although it seems way to inaccurate to use | maybe detect levels setting that regulates though how many search results get scanned for compatible versions
+# TODO check github releases of a mod(last resort)
+# TODO curseforge support(needs investigating)
+
 
 async def get_user_confirmation(prompt: str = "Confirm? (yes/no): ") -> bool:
     while True:
@@ -116,6 +122,7 @@ async def process_file(file,index):
     for e in index.data:
         if e.get("hash") == mod.hash:
             await mod.get_data_from_dict(e)
+            mod.versions = await api.request(f"https://api.modrinth.com/v2/project/{mod.project_id}/version")
             break
     else:
         if not await _get_data_backup(mod):
@@ -124,8 +131,6 @@ async def process_file(file,index):
     # replace old index entry with new one
     await mod.remove_from_index()
     await mod.write_to_index()
-    if not mod.versions:
-        mod.versions = await api.request(f"https://api.modrinth.com/v2/project/{mod.project_id}/version")
     await update_mod(mod)
 
 async def update_mod(mod:ModEntry):
