@@ -8,11 +8,10 @@ from pathlib import Path
 
 
 REQUIRED_PACKAGES = [
-    'requests',
     'toml',
-    'colorama',
     'aiofiles',
-    'httpx'
+    'httpx',
+    'aioconsole'
 ]
 
 def install_package(package):
@@ -46,7 +45,8 @@ DEFAULT_CONFIG = {
     "minecraft_version": "1.21.7",
     "mod_loader": "fabric",
     "mods_directory": "./mods",
-    "index_file": ".index.json"
+    "index_file": ".index.json",
+    "autoinstall_via_search": False
 }
 
 try:
@@ -65,6 +65,7 @@ MINECRAFT_VERSION = config['minecraft_version']
 MOD_LOADER = config['mod_loader']
 MODS_DIRECTORY = Path(__file__).parent.parent / (config['mods_directory'])
 INDEX_FILE = MODS_DIRECTORY / config['index_file']
+AUTOINSTALL_SEARCH = config["autoinstall_via_search"]
 
 # Ensure mods directory exists
 MODS_DIRECTORY.mkdir(exist_ok=True)

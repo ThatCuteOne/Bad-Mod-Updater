@@ -8,7 +8,7 @@ from pathlib import Path
 class index():
     def __init__(self):
         self.data = self.load()
-    def write(self,new_data:dict):
+    async def write(self,new_data:dict):
         self.data.append(new_data)
     def save(self):
         with open(settings.INDEX_FILE, 'w') as f:
@@ -22,7 +22,7 @@ class index():
             return []
         except json.JSONDecodeError as a:
             return []
-    def remove_by_hash(self,hash):
+    async def remove_by_hash(self,hash):
         new_index = []
         for e in self.data:
             if e.get("hash") == hash:
@@ -53,7 +53,9 @@ class ModEntry():
         except:
             pass
     async def write_to_index(self,index:index):
-        index.write(await self.convert_to_dict())
+        await index.write(await self.convert_to_dict())
+    async def remove_from_index(self,index:index):
+        await index.remove_by_hash(self.hash)
 
     async def convert_to_dict(self):
         return {

@@ -1,11 +1,5 @@
-
 from pathlib import Path
-from shlex import quote
-import requests
 import httpx
-
-
-
 
 async def request(url:str) -> dict:
     async with httpx.AsyncClient() as client:
@@ -14,18 +8,18 @@ async def request(url:str) -> dict:
         return response.json()
 
 
-async def search(prompt: str, limit: int = 1) -> dict:
+async def search(prompt: str, limit: int = 1,type="mod") -> dict:
     async with httpx.AsyncClient() as client:
         response = await client.get(
             url="https://api.modrinth.com/v2/search",
             params={
                 "query": prompt,
-                "limit": limit
+                "limit": limit,
+                "facets":f"[[\"project_type:{type}\"]]"
             }
         )
         response.raise_for_status()
         return response.json()
-
 
 async def download_file(url: str,destination: Path):
     async with httpx.AsyncClient() as client:
