@@ -39,6 +39,13 @@ async def get_modID_from_file(file):
             raise ValueError(f"Unsupported mod format: {file}")
         
 
+class ModHandler():
+    def __init__(self):
+        self.mods: list = []
+        self.new_index:list = []
+        self.dependiencies:list = []
+
+handler = ModHandler()
 
 @dataclass
 class DownloadTask():
@@ -56,7 +63,7 @@ class Mod():
     target_version:str = None
     dependency:bool = False
     parents:list = field(default_factory=list)
-    download : DownloadTask = None
+    download : DownloadTask = field(default_factory=lambda: DownloadTask(None, None, None))
 
 async def convert_mod_to_indexEntry(mod:Mod)-> dict:
     return {
@@ -102,7 +109,7 @@ async def discover_mod(file:os.DirEntry):
             logger.info(f"Mod found in index for file {file.name}")
             mod.modID = indexEntry.get("modID")
             mod.version = indexEntry.get("versionID")
-            return mod
+            handler.mods.append(mod)
     else:
         try:
             ID = await get_modID_from_file(file)
@@ -111,7 +118,7 @@ async def discover_mod(file:os.DirEntry):
                 version = (await hashmatch_in_versions(mod.hashsha512,mod.versions))
                 mod.modID = version.get("project_id")
                 mod.version = version.get("id")
-                return mod
+                handler.mods.append(mod)
             except Exception:
                 hits = await networking.modrinth_api_endpoint_request("search",
                             params={
@@ -123,16 +130,16 @@ async def discover_mod(file:os.DirEntry):
                 )
                 if hits.get("total_hits") <= 0:
                     logger.warning(f"Could not discover mod for file: {file.name}")
-                    return None
+                    return
                 search_tasks= []
                 for hit in hits["hits"]:
                     search_tasks.append(process_search_result(hit,mod))
                 res = await asyncio.gather(*search_tasks)
                 if True in res:
-                    return mod
+                    handler.mods.append(mod)
                 else:
                     logger.warning(f"Could not discover mod for file: {file.name}")
-                    return None
+                    return
         except ValueError as e:
             logger.error(e)
 
@@ -151,7 +158,6 @@ async def process_dependency(dependency:dict):
                         if entry.get("version") == dependency.get("version_id"):
                             return None
                         else:
-                            logger.info("UWUWDAD ADAWD HELP ME")
                             mod.hashsha512 = entry.get("sha512")
                             return mod
                 else:
@@ -174,6 +180,18 @@ async def get_newest_version(versions):
     return compatible_versions[0]
 
 
+async def fetch_dependencies():
+    dependency_tasks= []
+    current_depends = handler.dependiencies
+    for d in current_depends:
+        dependency_tasks.append(get_download_link(d))
+        handler.dependiencies.pop(0)
+        handler.mods.append(d)
+    
+    await asyncio.gather(*dependency_tasks)
+
+
+
 async def get_download_link(mod:Mod):
     if mod.target_version:
         newest_version = await networking.modrinth_api_endpoint_request(f"project/{mod.modID}/version/{mod.target_version}")
@@ -184,17 +202,15 @@ async def get_download_link(mod:Mod):
             newest_version = await get_newest_version(mod.versions)
         except Exception as e:
             logger.error(f"No Compatible Version Found for mod {mod.modID}")
-            return None,None , await convert_mod_to_indexEntry(mod)
+            handler.new_index.append(await convert_mod_to_indexEntry(mod))
+            return 
 
     for f in newest_version.get("files"):
         if f.get("primary"):
             file = f
             break
-    
-
     dependency_tasks = []
     for dependency in newest_version.get("dependencies"):
-            logger.info(dependency)
             dependency_tasks.append(process_dependency(dependency))
         
     dependencies = await asyncio.gather(*dependency_tasks)
@@ -203,20 +219,30 @@ async def get_download_link(mod:Mod):
         dependencies.remove(None)
     except:  # noqa: E722
         pass
-    logger.info(dependencies)
+    handler.dependiencies += dependencies
 
 
 
     if mod.hashsha512 == file.get("hashes").get("sha512"):
-        return None,dependencies , await convert_mod_to_indexEntry(mod)
+        handler.new_index.append(await convert_mod_to_indexEntry(mod))
     else:
         mod.download = DownloadTask(
                 file.get("url"),
                 file.get("filename"),
                 mod.filename
             )
-        
-        return mod,dependencies, None
+async def download_jar(mod:Mod):
+    task = mod.download
+    if await networking.download_jar(task.url,task.filename):
+        if task.filename != task.old_mod and task.old_mod is not None:
+            logger.info(f"Deleting {task.old_mod}")
+            os.remove(f"./mods/{task.old_mod}")
+
+        handler.new_index.append(await convert_mod_to_indexEntry(mod))
+
+async def write_to_index():
+    with open(config.MODS_DIR/".modIndex.json","w") as f:
+        json.dump(handler.new_index,f,indent=2)
 
 
 async def main():
@@ -228,58 +254,30 @@ async def main():
     async for f in get_mod_files(config.MODS_DIR):
         discover_tasks.append(discover_mod(f))
     
-    mods = await asyncio.gather(*discover_tasks)
-    try:
-        mods.remove(None)
-    except Exception:
-        pass
+    await asyncio.gather(*discover_tasks)
+            
+    
     
     # get download tasks
     
     tasks = []
-    for m in mods:
+    for m in handler.mods:
         tasks.append(get_download_link(m))
 
-    res = await asyncio.gather(*tasks)
-    mods = []
-    index = []
-    dependencies = []
-    for r in res:
-        mod,depend,ind = r
-        if mod is not None:
-            mods.append(mod)
-        if depend is not None:
-            dependencies += depend
-        if ind is not None:
-            index.append(ind)
-    
-    while dependencies:
-        tasks = []
-        for m in dependencies:
-            tasks.append(get_download_link(m))
-        res = await asyncio.gather(*tasks)
-        dependencies = []
-        for r in res:
-            mod,depend,ind = r
-            if mod is not None:
-                mods.append(mod)
-            if depend is not None:
-                dependencies += depend
-            if ind is not None:
-                index.append(ind)
+    await asyncio.gather(*tasks)
+    await fetch_dependencies()
 
+    downloads = []
+    for m in handler.mods:
+        downloads.append(download_jar(m))
     
-    print("-----------------Dependencies----------------------")
-    print(dependencies)
-    print("-----------------Mods----------------------")
-    for m in mods:
-        print(m.modID)
-    print("-----------------Index----------------------")
-    print(index)
+    await asyncio.gather(*downloads)
+
+    await write_to_index()
 
 
     
-    
+
     
 
 
