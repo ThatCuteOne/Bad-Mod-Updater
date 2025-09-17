@@ -110,6 +110,7 @@ async def discover_mod(file:os.DirEntry):
             mod.modID = indexEntry.get("modID")
             mod.version = indexEntry.get("versionID")
             handler.mods.append(mod)
+            return
     else:
         try:
             ID = await get_modID_from_file(file)
@@ -202,6 +203,7 @@ async def get_download_link(mod:Mod):
             newest_version = await get_newest_version(mod.versions)
         except Exception as e:
             logger.error(f"No Compatible Version Found for mod {mod.modID}")
+            handler.mods.remove(mod)
             handler.new_index.append(await convert_mod_to_indexEntry(mod))
             return 
 
@@ -224,6 +226,7 @@ async def get_download_link(mod:Mod):
 
 
     if mod.hashsha512 == file.get("hashes").get("sha512"):
+        handler.mods.remove(mod)
         handler.new_index.append(await convert_mod_to_indexEntry(mod))
     else:
         mod.download = DownloadTask(
