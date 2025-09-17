@@ -1,3 +1,2 @@
-mods/
-core/__pycache__
-config.json
+mods
+*__pycache__*
