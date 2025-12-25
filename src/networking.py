@@ -1,10 +1,11 @@
 import asyncio
 import aiofiles
 import aiohttp
-import httpx
 import logging
 
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
+
+import config
 logger = logging.getLogger("Network")
 
 
@@ -45,7 +46,7 @@ async def download_jar(download_url,filename):
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1.2, min=4, max=10),retry=retry_if_exception(should_retry))
 async def modrinth_api_endpoint_request(endpoint:str,params=None):
     url = f"{MODRINTH_BASE}/{endpoint}"
-    async with httpx.AsyncClient() as client:
+    async with aiohttp.ClientSession() as client:
         try:
             response = await client.get(
                 url,
@@ -61,8 +62,36 @@ async def modrinth_api_endpoint_request(endpoint:str,params=None):
                 raise Exception(f"Request to {url} failed: {error_text}")
             
             return response.json()
-        except httpx.RequestError as e:
+        except aiohttp.RequestError as e:
             logger.error(f"Request to {url} failed: {e}")
             raise Exception(f"Request to {url} failed: {e}")
-        except httpx.TimeoutException as e:
+        except aiohttp.TimeoutException as e:
+            logger.error(f"Request to {url} timed out: {e}")
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1.2, min=4, max=10),retry=retry_if_exception(should_retry))
+async def modrinth_api_post_newest_versions(hashes:list,endpoint:str="version_files/update"):
+    url = f"{MODRINTH_BASE}/{endpoint}"
+    async with aiohttp.ClientSession() as client:
+        try:
+            response = await client.post(
+                url,
+                json={
+                    "hashes": hashes,
+                    "algorithm": "sha512",
+                    "loaders":[config.LOADER],
+                    "game_versions": []
+                }
+            )
+            if not response:
+                if response.status_code == 404:
+                        logger.error(f"Resource not found at {url}")
+                        raise Exception(f"Resource not found at {url}")
+                error_text = response.text
+                logger.error(f"Request to {url} failed: {error_text}")
+                raise Exception(f"Request to {url} failed: {error_text}")
+            
+            return await response.json()
+        except aiohttp.RequestError as e:
+            logger.error(f"Request to {url} failed: {e}")
+            raise Exception(f"Request to {url} failed: {e}")
+        except aiohttp.TimeoutException as e:
             logger.error(f"Request to {url} timed out: {e}")
