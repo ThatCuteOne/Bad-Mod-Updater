@@ -42,7 +42,7 @@ class Mod():
     target_version:str = None
     dependency:bool = False
     parents:list = field(default_factory=list)
-    download : DownloadTask = field(default_factory=lambda: DownloadTask(None, None, None))
+    download : DownloadTask = field(default_factory=lambda: DownloadTask)
 
 
 
@@ -63,14 +63,12 @@ async def get_download_link(mod:Mod,data:dict):
     new_version = data[mod.hashsha512]
     if not new_version:
         return
-    
     for f in new_version["files"]:
         if f["primary"]:
             modfile = f
             break
     if modfile["hashes"]["sha512"] == mod.hashsha512:
         return
-
     mod.download = DownloadTask(
         filename=modfile["filename"],
         url=modfile["url"],
@@ -80,10 +78,11 @@ async def get_download_link(mod:Mod,data:dict):
 
 async def download_jar(mod:Mod):
     task = mod.download
-    if await networking.download_jar(task.url,task.filename):
-        if task.filename != task.old_mod and task.old_mod is not None:
-            logger.info(f"Deleting {task.old_mod}")
-            os.remove(f"./mods/{task.old_mod}")
+    if isinstance(task,DownloadTask):
+        if await networking.download_jar(task.url,task.filename):
+            if task.filename != task.old_mod and task.old_mod is not None:
+                logger.info(f"Deleting {task.old_mod}")
+                os.remove(f"./mods/{task.old_mod}")
 
 
 async def main():

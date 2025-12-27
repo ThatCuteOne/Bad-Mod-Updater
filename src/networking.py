@@ -78,7 +78,7 @@ async def modrinth_api_post_newest_versions(hashes:list,endpoint:str="version_fi
                     "hashes": hashes,
                     "algorithm": "sha512",
                     "loaders":[config.LOADER],
-                    "game_versions": []
+                    "game_versions": config.MINECRAFT_VERSIONS
                 }
             )
             if not response:
