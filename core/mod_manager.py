@@ -125,8 +125,7 @@ class ModIndex():
         for existing in self.versions:
             # get modversion from index by matching hash
             for existing_file in existing['files']:
-                if (existing_file['primary'] and not
-                    existing_file['hashes'].get('sha512') == target_hash):
+                if existing_file['primary'] and not existing_file['hashes']["sha512"] == target_hash:
                         new_index.append(existing)
         self.versions = new_index
         self.save()
