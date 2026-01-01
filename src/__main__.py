@@ -60,8 +60,9 @@ async def discover_mod(file:os.DirEntry):
 
 
 async def get_download_link(mod:Mod,data:dict):
-    new_version = data[mod.hashsha512]
-    if not new_version:
+    try:
+        new_version = data[mod.hashsha512]
+    except KeyError:
         return
     for f in new_version["files"]:
         if f["primary"]:
